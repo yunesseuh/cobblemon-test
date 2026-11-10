@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le Portail — Serveur Cobblemon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<script>
+/* ==========================================================================
+   RÉGLAGES — c'est le seul bloc à modifier.
+   ========================================================================== */
+const CONFIG = {
+  // Nom affiché en haut de la page.
+  NOM_SERVEUR: "Cobblemon Chill Coop",
+
+  // Adresse du Worker Cloudflare (le bot), sans barre à la fin.
+  // Exemple : "https://portail.tonpseudo.workers.dev"
+  // Laisse vide pour essayer la page en mode démonstration, sans Discord.
+  API_URL: "",
+
+  // ID de l'application Discord (Developer Portal > General Information).
+  DISCORD_CLIENT_ID: ""
+};
+</script>
+<style>
+  :root{
+    --box: rgba(16, 28, 58, .92);
+    --box-edge: #f4f6ff;
+    --box-edge-2: #5d7bd0;
+    --ink: #ffffff;
+    --shade: #0a1226;
+    --yellow: #ffe45c;
+    --cyan: #6fe8ff;
+    --green: #8df07a;
+    --commun: #c8d2e4; --rare: #6fb8ff; --legend: #ffd24a;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:#101a3c; color:var(--ink);
+    font-family:"Pixelify Sans", "Courier New", monospace;
+    font-size:20px; line-height:1.35; overflow:hidden;
+    -webkit-font-smoothing:none; text-shadow:2px 2px 0 var(--shade);
+  }
+  canvas{image-rendering:pixelated; image-rendering:crisp-edges}
+  #bg{position:fixed; inset:0; width:100%; height:100%; object-fit:cover}
+  #voile{position:fixed; inset:0; background:rgba(8,12,32,0); transition:background .6s; pointer-events:none}
+  body.sombre #voile{background:rgba(8,12,32,.55)}
+  #stage{position:fixed; inset:0; display:flex; flex-direction:column; padding:14px; gap:12px; max-width:1020px; margin:0 auto}
+  header{display:flex; justify-content:space-between; align-items:center; gap:12px}
+  header .name{font-weight:700; letter-spacing:.06em; text-transform:uppercase; font-size:16px}
+  header .droite{display:flex; gap:8px; align-items:center}
+  #qui{font-size:15px; display:none; align-items:center; gap:8px}
+  #qui img{width:26px; height:26px; border-radius:6px; border:2px solid var(--box-edge); image-rendering:auto}
+  .iconbtn{
+    font:inherit; font-size:15px; color:var(--ink); text-shadow:inherit; cursor:pointer;
+    background:var(--box); border:3px solid var(--box-edge); border-radius:10px; padding:4px 12px; white-space:nowrap;
+  }
+  :focus-visible{outline:3px solid var(--yellow); outline-offset:2px}
+
+  .box{
+    background:var(--box); border:4px solid var(--box-edge); border-radius:14px;
+    box-shadow:0 0 0 3px var(--box-edge-2), 0 6px 0 3px rgba(0,0,0,.28);
+  }
+  #panel{flex:1; min-height:0; display:flex; overflow:auto; padding:4px}
+  #panel > *{margin:auto}
+  #panel:empty{visibility:hidden}
+
+  #bottom{display:flex; flex-direction:column; align-items:flex-end; gap:10px}
+  #choices{padding:10px 14px; min-width:min(100%, 300px); max-width:100%; display:none}
+  #choices.on{display:block}
+  .opt{
+    display:block; width:100%; text-align:left; font:inherit; color:var(--ink); text-shadow:inherit;
+    background:none; border:0; padding:5px 6px 5px 30px; position:relative; cursor:pointer; border-radius:6px;
+  }
+  .opt.sel{color:var(--yellow)}
+  .opt.sel::before{content:"▶"; position:absolute; left:6px; top:5px; font-size:.8em; animation:nudge .6s steps(2) infinite}
+  @keyframes nudge{50%{transform:translateX(3px)}}
+  .saisie{display:flex; gap:8px}
+  .saisie input{flex:1; min-width:0; font:inherit; color:var(--ink); background:rgba(0,0,0,.35); border:3px solid var(--box-edge-2); border-radius:8px; padding:6px 10px}
+
+  #dialog{width:100%; min-height:124px; padding:16px 20px 22px; position:relative; cursor:pointer}
+  #text{min-height:3.9em; white-space:pre-wrap}
+  #more{position:absolute; right:18px; bottom:6px; color:var(--yellow); display:none; animation:bob .7s steps(2) infinite}
+  #more.on{display:block}
+  @keyframes bob{50%{transform:translateY(4px)}}
+  .y{color:var(--yellow)} .c{color:var(--cyan)} .g{color:var(--green)}
+
+  /* Écran titre : le titre est posé dans le ciel, au-dessus de l'arche */
+  .title{text-align:center; margin-top:2vh !important}
+  .title h1{font-size:clamp(40px, 9vw, 84px); margin:0; line-height:.95; letter-spacing:.08em; text-shadow:4px 4px 0 var(--shade), 0 0 28px rgba(111,232,255,.55)}
+  .title p{margin:.5em 0 0; font-size:18px; color:var(--cyan); letter-spacing:.2em; text-transform:uppercase}
+
+  /* Cartes illustrées */
+  .cards{display:flex; flex-wrap:wrap; gap:16px; justify-content:center}
+  .card{width:236px; overflow:hidden; text-align:center; padding-bottom:12px}
+  .art{position:relative; height:128px; border-bottom:4px solid var(--box-edge); background:#0a0c1c}
+  .art .sc{width:100%; height:100%; display:block}
+  .art .bl{position:absolute; left:10px; bottom:-18px; width:40px; height:48px; filter:drop-shadow(2px 3px 0 rgba(0,0,0,.45))}
+  .art .tag{position:absolute; right:8px; top:8px; font-size:13px; text-transform:uppercase; letter-spacing:.1em; padding:1px 8px; border-radius:6px; background:rgba(10,18,38,.8); border:2px solid currentColor}
+  .card .nm{font-size:24px; font-weight:700; margin:14px 6px 0 56px; line-height:1.05; text-align:left; overflow-wrap:anywhere}
+  .card .sub{font-size:15px; margin:6px 8px 0 56px; text-align:left; color:var(--cyan)}
+  .card.hidden .art .sc{filter:brightness(.35) saturate(.4)}
+  .card.hidden .bl{visibility:hidden}
+  .card.hidden .nm, .card.hidden .sub{margin-left:8px; text-align:center}
+  .pop{animation:pop .4s steps(5)}
+  @keyframes pop{0%{transform:scale(.6) rotate(-3deg)}70%{transform:scale(1.08)}100%{transform:scale(1)}}
+
+  /* Grille de choix manuel */
+  .grid{padding:12px; display:grid; grid-template-columns:auto repeat(3, minmax(0,1fr)); gap:6px 8px; align-items:center; font-size:17px}
+  .grid .gen{color:var(--cyan); font-size:14px; white-space:nowrap; padding-right:4px}
+  .cell{font:inherit; color:var(--ink); text-shadow:inherit; cursor:pointer; padding:5px 8px; border-radius:8px; border:0; border-left:6px solid var(--el); background:rgba(255,255,255,.08); text-align:left; min-width:0; overflow:hidden}
+  .cell:hover{background:rgba(255,228,92,.25)}
+
+  /* Carte de dresseur */
+  .dresseur{width:min(100%, 640px); overflow:hidden}
+  .bandeau{position:relative; height:120px; border-bottom:4px solid var(--box-edge)}
+  .bandeau canvas{width:100%; height:100%; display:block}
+  .bandeau::after{content:""; position:absolute; inset:0; background:linear-gradient(to top, rgba(8,12,32,.78), rgba(8,12,32,0) 70%)}
+  .bandeau .id{z-index:1}
+  .bandeau .id{position:absolute; left:16px; bottom:10px; display:flex; align-items:flex-end; gap:12px}
+  .bandeau img{width:64px; height:64px; border-radius:10px; border:4px solid var(--box-edge); image-rendering:auto; background:#223}
+  .bandeau h2{margin:0; font-size:30px; line-height:1; text-shadow:3px 3px 0 var(--shade)}
+  .bandeau small{font-size:15px; color:var(--cyan)}
+  .dresseur .corps{padding:12px 16px 14px}
+  .ligne{display:flex; justify-content:space-between; gap:12px; font-size:17px; padding:3px 0}
+  .ligne span:first-child{color:var(--cyan)}
+  .minis{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; margin-top:10px}
+  .mini{border:3px solid var(--box-edge-2); border-radius:10px; overflow:hidden; text-align:center; background:rgba(0,0,0,.25)}
+  .mini canvas{width:100%; height:56px; display:block}
+  .mini b{display:block; font-size:17px; padding:2px 4px 0; overflow-wrap:anywhere}
+  .mini i{display:block; font-style:normal; font-size:12px; text-transform:uppercase; letter-spacing:.08em; padding-bottom:4px}
+  .mini.ok{border-color:var(--green)}
+
+  /* Tableau de chasse */
+  .tableau{width:min(100%, 760px); padding:14px 16px}
+  .tableau h2{margin:0 0 8px; font-size:24px}
+  .rang{display:grid; grid-template-columns:1.2fr repeat(3, 1fr); gap:8px; padding:7px 0; border-top:2px solid rgba(255,255,255,.14); font-size:16px; align-items:center}
+  .rang .pj b{display:block} .rang .pj small{color:var(--cyan); font-size:13px}
+  .pastille{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; border:2px solid var(--box-edge)}
+
+  @media (max-width:600px){
+    body{font-size:17px} #stage{padding:10px}
+    .card{width:158px} .art{height:96px} .card .nm{font-size:20px; margin-left:8px; margin-top:22px; text-align:center} .card .sub{margin-left:8px; text-align:center; font-size:13px}
+    .grid{font-size:14px; gap:4px 5px; grid-template-columns:repeat(3, minmax(0,1fr)); padding:10px}
+    .grid .gen{grid-column:1/-1; margin-top:4px}
+    .cell{padding:5px 4px 5px 6px}
+    .rang{grid-template-columns:1fr 1fr; font-size:14px} .rang .pj{grid-column:1/-1}
+    .bandeau h2{font-size:24px}
+  }
+  @media (prefers-reduced-motion:reduce){ .opt.sel::before,#more,.pop{animation:none} }
+</style>
+</head>
+<body>
+<canvas id="bg" width="320" height="180" aria-hidden="true"></canvas>
+<div id="voile"></div>
+<div id="stage">
+  <header>
+    <span class="name" id="srv"></span>
+    <span class="droite"><span id="qui"></span><button class="iconbtn" id="snd" aria-pressed="true">Son : oui</button></span>
+  </header>
+  <div id="panel" aria-live="polite"></div>
+  <div id="bottom">
+    <div id="choices" class="box"></div>
+    <div id="dialog" class="box" role="button" tabindex="0" aria-label="Continuer">
+      <div id="text" aria-live="polite"></div>
+      <span id="more">▼</span>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================================
+   DONNÉES
+   ========================================================================== */
+const TYPES = { normal:["Normal","#a8a878"], feu:["Feu","#f0703c"], eau:["Eau","#4a9cf0"], plante:["Plante","#58c060"], electrik:["Électrik","#f8d030"], glace:["Glace","#8fd8e8"], combat:["Combat","#c8483c"], poison:["Poison","#a858b0"], sol:["Sol","#d8b050"], vol:["Vol","#98a8f0"], psy:["Psy","#f85888"], insecte:["Insecte","#a8b820"], roche:["Roche","#b8a048"], spectre:["Spectre","#8068b0"], dragon:["Dragon","#8058f8"], tenebres:["Ténèbres","#8a7060"], acier:["Acier","#b8b8d0"], fee:["Fée","#ee99ac"] };
+const HABITATS = { foret:"Forêt", prairie:"Prairie", grotte:"Grotte", ocean:"Océan", riviere:"Rivière", montagne:"Montagne", neige:"Toundra", desert:"Désert", volcan:"Volcan", ciel:"Haut ciel", ruines:"Ruines", cosmos:"Ailleurs" };
+const DECOR_STARTER = { plante:"foret", feu:"volcan", eau:"riviere" };
+const RARETES = [["commun","Commune","var(--commun)",1],["rare","Rare","var(--rare)",2],["legend","Légendaire","var(--legend)",3]];
+const REGIONS = ["Kanto","Johto","Hoenn","Sinnoh","Unys","Kalos","Alola","Galar","Paldea"];
+
+// Neuf traits de caractère mesurés par le quiz.
+// BR brave · CA calme · JO jovial · MA malin · FI fier · DO doux · RE réservé · GO gourmand/paresseux · EN énergique
+// Chaque starter a SA nature, choisie d'après son caractère, et un profil de traits.
+const S = (nom, el, gen, nature, profil, txt) => ({ nom, el, gen, nature, profil, txt });
+const STARTERS = [
+  S("Bulbizarre","plante",0,"Docile",   {CA:3,DO:2},      "Posé, fiable, facile à vivre. Tu avances à ton rythme et tout le monde aime t'avoir dans l'équipe."),
+  S("Salamèche","feu",0,"Brave",        {BR:3,EN:1,FI:1}, "Tu fonces d'abord, tu réfléchis ensuite. Une flamme qui ne s'éteint pas, même sous la pluie."),
+  S("Carapuce","eau",0,"Farceur",       {MA:3,JO:2},      "Toujours une blague d'avance et un plan un peu louche. Avec toi, on ne s'ennuie jamais."),
+  S("Germignon","plante",1,"Doux",      {DO:3,JO:1,CA:1}, "Gentil sans effort. Tu apaises les tensions et tu remarques quand quelqu'un ne va pas bien."),
+  S("Héricendre","feu",1,"Timide",      {RE:3,DO:1,BR:1}, "Discret au premier abord. Mais quand on te pousse à bout, le feu s'allume d'un coup."),
+  S("Kaiminus","eau",1,"Jovial",        {JO:3,EN:2},      "Un rire qui s'entend de loin. Tu mords la vie à pleines dents, parfois un peu trop fort."),
+  S("Arcko","plante",2,"Imperturbable", {RE:2,FI:2,CA:2}, "Sang-froid total. Tu observes depuis ta branche et tu ne te laisses impressionner par personne."),
+  S("Poussifeu","feu",2,"Affectueux",   {DO:2,EN:2,BR:1}, "Tu suis tes amis partout et tu leur tiens chaud. Petit, mais prêt à tout pour eux."),
+  S("Gobou","eau",2,"Décontracté",      {CA:2,JO:2,GO:1}, "Rien ne presse. Tu prends les choses comme elles viennent, et bizarrement ça marche toujours."),
+  S("Tortipouss","plante",3,"Sérieux",  {CA:2,BR:2,FI:1}, "Les pieds sur terre. Tu fais les choses bien, dans l'ordre, et tu ne lâches pas en route."),
+  S("Ouisticram","feu",3,"Espiègle",    {EN:3,MA:2},      "Impossible de te faire tenir en place. Tu grimpes partout et tu touches à tout."),
+  S("Tiplouf","eau",3,"Fier",           {FI:3,BR:1},      "Tu as ta fierté et tu n'aimes pas qu'on t'aide. Tu tombes, tu te relèves, et tu fais comme si de rien n'était."),
+  S("Vipélierre","plante",4,"Élégant",  {FI:3,CA:1,MA:1}, "Un regard, et tout est dit. Tu vises l'excellence et tu le fais avec style."),
+  S("Gruikui","feu",4,"Gourmand",       {GO:3,JO:1},      "Le bonheur, c'est simple : un bon repas et les potes autour. Le reste peut attendre."),
+  S("Moustillon","eau",4,"Vaillant",    {BR:2,JO:1,DO:1,FI:1}, "Pas le plus fort, mais le premier à se lever. Tu compenses tout par le cœur."),
+  S("Marisson","plante",5,"Protecteur", {DO:2,BR:2,JO:1}, "Souriant, solide, et toujours devant quand il faut défendre les autres."),
+  S("Feunnec","feu",5,"Intuitif",       {MA:2,RE:1,FI:1,CA:1}, "Tu sens les choses avant qu'elles arrivent. Calme en surface, très vif en dessous."),
+  S("Grenousse","eau",5,"Observateur",  {RE:2,MA:2,EN:1}, "Tu regardes, tu attends, et tu agis au bon moment. On te croit distrait : c'est une erreur."),
+  S("Brindibou","plante",6,"Rêveur",    {GO:2,CA:2,RE:1}, "Tu somnoles le jour et tu t'éveilles quand tout est calme. Le monde est plus beau en silence."),
+  S("Flamiaou","feu",6,"Indépendant",   {RE:3,FI:2},      "Tu n'aimes pas qu'on te colle. Tu donnes ta confiance rarement, mais pour de bon."),
+  S("Otaquin","eau",6,"Showman",        {JO:3,FI:1,EN:1}, "Tout est une scène. Tu fais le spectacle, et tu travailles dur pour qu'il soit réussi."),
+  S("Ouistempo","plante",7,"Curieux",   {EN:2,JO:2,MA:1}, "Tu as le rythme dans la peau et le nez partout. Chaque nouveauté est une fête."),
+  S("Flambino","feu",7,"Sportif",       {EN:3,BR:2},      "Toujours en mouvement, toujours sûr de toi. Tu donnes le tempo et les autres suivent."),
+  S("Larméléon","eau",7,"Sensible",     {DO:2,RE:2},      "Tu ressens tout plus fort que les autres. C'est ta fragilité, et ce sera ta plus grande force."),
+  S("Poussacha","plante",8,"Câlin",     {DO:2,FI:1,MA:1,JO:1}, "Tu aimes qu'on s'occupe de toi, et tu sais très bien comment l'obtenir."),
+  S("Chochodile","feu",8,"Tranquille",  {GO:3,CA:2},      "Jamais pressé, jamais stressé. Tu vis à ta vitesse, de préférence près du buffet."),
+  S("Coiffeton","eau",8,"Soigné",       {FI:2,CA:1,EN:1,MA:1}, "Chaque chose à sa place, pas une plume de travers. Sérieux, appliqué, et un peu maniaque.")
+];
+
+// Questions originales. Chaque réponse : [texte, trait principal (+2), trait secondaire (+1)].
+const QUESTIONS = [
+  ["Tes potes lancent une soirée sur le serveur. Tu fais quoi en premier ?",
+    [["Je pars explorer tout droit, sans carte.","BR","EN"],["Je construis un abri douillet.","GO","CA"],["Je vais pêcher tranquillement.","CA","RE"],["Je range les coffres de tout le monde.","DO","FI"]]],
+  ["Un coffre brille au fond d'une grotte toute noire.",
+    [["J'y fonce.","BR","EN"],["Je pose des torches partout d'abord.","CA","FI"],["J'appelle les potes, on y va ensemble.","DO","JO"],["C'est sûrement un piège. J'y vais quand même.","MA","BR"]]],
+  ["Ton pote tombe dans la lave. Heureusement, il garde son inventaire.",
+    [["Je ris pendant dix minutes.","JO","EN"],["Je vérifie d'abord qu'il va bien.","DO","CA"],["Je construis une barrière autour.","FI","CA"],["J'en fais une légende du serveur.","MA","JO"]]],
+  ["Ta base idéale, c'est…",
+    [["Une cabane perchée dans les arbres.","RE","CA"],["Un château, avec des tours.","FI","BR"],["Une maison sur pilotis en bord de mer.","JO","CA"],["Un terrier caché, plein de passages secrets.","MA","RE"]]],
+  ["Il se met à pleuvoir.",
+    [["Je danse dessous.","JO","EN"],["Je rentre faire cuire quelque chose.","GO","CA"],["Je continue, la pluie ne m'arrête pas.","BR","EN"],["J'en profite pour trier mon inventaire.","FI","CA"]]],
+  ["On te confie le dernier gâteau du groupe.",
+    [["Je le coupe en parts égales.","DO","FI"],["Je le mange. Désolé.","GO","MA"],["Je le garde pour une grande occasion.","RE","CA"],["Je l'échange contre quelque chose de mieux.","MA","FI"]]],
+  ["Un Pokémon rare apparaît. Il te reste une seule Poké Ball.",
+    [["Je la lance tout de suite.","BR","EN"],["Je l'observe d'abord.","RE","MA"],["J'en fabrique d'autres, il attendra.","CA","FI"],["Je préviens tout le monde sur Discord.","DO","JO"]]],
+  ["Ton rôle dans le groupe ?",
+    [["Celui qui fait rire.","JO","MA"],["Celui qui a toujours un plan.","FI","CA"],["Celui qui nourrit tout le monde.","DO","GO"],["Celui qu'on perd tout le temps.","EN","BR"]]],
+  ["Le matin, tu es plutôt…",
+    [["Debout avant le soleil.","EN","FI"],["Encore cinq minutes.","GO","CA"],["Déjà dehors.","EN","BR"],["Ça dépend de la soirée d'hier.","JO","GO"]]],
+  ["Tu découvres un village abandonné.",
+    [["Je le restaure, maison par maison.","FI","DO"],["Je cherche ce qui a pu s'y passer.","RE","CA"],["Je fouille tous les coffres.","MA","EN"],["J'y monte une scène pour un concert.","JO","FI"]]],
+  ["Un pote te propose un combat amical.",
+    [["Toujours partant.","BR","EN"],["Seulement s'il y a un goûter après.","GO","JO"],["Mon équipe est prête depuis une semaine.","FI","MA"],["Je préfère qu'on aille se balader.","RE","DO"]]],
+  ["Du haut d'une tour, tu vois le soleil se coucher.",
+    [["Je prends une capture d'écran bien cadrée.","FI","RE"],["Je m'assois et je regarde.","CA","GO"],["Je saute dans le lac en bas.","EN","JO"],["Je repère ma prochaine destination.","BR","MA"]]],
+  ["Un nouveau rejoint le serveur et ne comprend rien.",
+    [["Je lui fais la visite complète.","DO","JO"],["Je lui donne mon meilleur matériel.","DO","BR"],["Je lui écris un guide.","FI","CA"],["Je le laisse découvrir, c'est le meilleur moyen.","MA","RE"]]],
+  ["Tu es perdu, très loin de la base.",
+    [["Parfait, c'est là que ça devient intéressant.","BR","JO"],["Je marche tout droit jusqu'à retrouver un repère.","CA","BR"],["Je demande qu'on vienne me chercher.","DO","RE"],["Je m'installe ici, finalement c'est joli.","GO","RE"]]]
+];
+const NB_QUESTIONS = 8;
+
+/* ==========================================================================
+   HASARD REPRODUCTIBLE (pour les décors et l'ordre des questions)
+   ========================================================================== */
+function graine(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19;} return ()=>{h=Math.imul(h^(h>>>16),2246822507); h=Math.imul(h^(h>>>13),3266489909); return (h^=h>>>16)>>>0;}; }
+function alea(seed){ let a=graine(String(seed))(); return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function melange(liste, seed){ const r=alea(seed), a=liste.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(r()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+/* ==========================================================================
+   ILLUSTRATIONS — paysages et blasons dessinés en pixels, tous originaux.
+   Chaque scène suit la même composition : un ciel en bandes, un astre placé
+   sur un tiers, trois plans de relief du plus clair au plus sombre, puis un
+   détail au premier plan qui donne l'identité du lieu.
+   ========================================================================== */
+const HAB = {
+  foret:   {ciel:["#17324a","#1f5560","#3f8f7a","#9fd6a0","#eaf5c8"], astre:[.72,.24,8,"#fff6c8"], couches:[["#2f7a66",.52,9,.035],["#1f5a48",.64,8,.06],["#123a2c",.78,5,.11]], deco:"pins"},
+  prairie: {ciel:["#3a6fd0","#62a0ea","#9ccbf5","#d8eefc","#fdf3d0"], astre:[.22,.22,9,"#fffbe0"], nuages:3, couches:[["#8fd08a",.6,6,.03],["#5fb868",.7,5,.05],["#3d9a52",.82,3,.09]], deco:"fleurs"},
+  grotte:  {ciel:["#0d0b1c","#17132e","#231c44","#2f2658","#3b2f6a"], couches:[["#2a2350",.6,10,.07],["#1a1536",.74,7,.12],["#0e0b20",.86,4,.2]], deco:"cristaux"},
+  ocean:   {ciel:["#f08a5c","#f6b072","#fbd38f","#fdeab4","#fff6d8"], astre:[.5,.44,11,"#fff3c0"], nuages:2, couches:[], deco:"vagues"},
+  riviere: {ciel:["#2f7fd0","#59a8e8","#95cdf4","#cfeafb","#eefbe0"], astre:[.8,.2,7,"#fffbe0"], nuages:2, couches:[["#6fc28a",.5,8,.04],["#3f9a64",.6,5,.07],["#2e7d4f",.68,2,.1]], deco:"riviere"},
+  montagne:{ciel:["#3a3f8a","#6a62b0","#b08ac8","#f0b0b8","#ffe0c0"], astre:[.28,.3,7,"#fff0d8"], couches:[["#8a86c0",.44,22,.03,"#ffffff"],["#5a5a98",.62,14,.05,"#e8ecff"],["#33345e",.8,6,.1]], deco:"pins"},
+  neige:   {ciel:["#28406e","#4a6aa0","#86a8d0","#c4dcf0","#f0f8ff"], astre:[.7,.22,6,"#ffffff"], couches:[["#a8c4e0",.5,16,.035,"#ffffff"],["#dcecf8",.68,6,.06],["#ffffff",.82,3,.1]], deco:"flocons"},
+  desert:  {ciel:["#e0603a","#f08c4a","#f8b860","#fcd88a","#fff0b8"], astre:[.64,.32,12,"#fff6d0"], couches:[["#e0a860",.58,7,.025],["#c88848",.7,6,.04],["#a86a38",.83,4,.07]], deco:"dunes"},
+  volcan:  {ciel:["#1a0c14","#3a1420","#6a1e22","#a83820","#e8742a"], couches:[["#3a1a20",.46,26,.022],["#261016",.68,8,.07],["#14080c",.83,4,.13]], deco:"lave"},
+  ciel:    {ciel:["#2a4fc0","#4f7ee0","#84b0f2","#bcd8fa","#f2f8ff"], astre:[.76,.26,9,"#fffbe0"], couches:[], deco:"nuages"},
+  ruines:  {ciel:["#141a3c","#232c5c","#3a4680","#5a68a0","#8a98c0"], astre:[.26,.24,8,"#f4f6ff"], etoiles:30, couches:[["#3a4470",.62,7,.04],["#252c4e",.78,4,.08]], deco:"colonnes"},
+  cosmos:  {ciel:["#08061a","#140c30","#261048","#3a145a","#1a0c38"], etoiles:70, couches:[], deco:"nebuleuse"},
+  portail: {ciel:["#0c1030","#161c4c","#283070","#4a4a98","#8a6ab0","#e0909a","#ffd0a0"], astre:[.8,.2,4,"#f8f4ff"], etoiles:60, couches:[["#3a3a80",.56,16,.02,"#b8b0e8"],["#2a2c62",.68,9,.045],["#181c44",.8,5,.08]], deco:"arche"}
+};
+function scene(cv, hab, seed){
+  const P=HAB[hab]||HAB.prairie, x=cv.getContext("2d"), W=cv.width, H=cv.height, k=W/96, r=alea(hab+"|"+seed);
+  const px=(c,X,Y,w=1,h=1)=>{ x.fillStyle=c; x.fillRect(Math.round(X),Math.round(Y),Math.max(1,Math.round(w)),Math.max(1,Math.round(h))); };
+  const disque=(c,cx,cy,R)=>{ for(let dy=-R;dy<=R;dy++){ const d=Math.floor(Math.sqrt(R*R-dy*dy)); px(c,cx-d,cy+dy,2*d+1,1); } };
+  const nuage=(cx,cy,w,c1="rgba(255,255,255,.9)",c2="rgba(255,255,255,.5)")=>{ px(c2,cx-w/2,cy,w,3*k); px(c1,cx-w/2+2*k,cy-2*k,w-5*k,3*k); px(c1,cx-w/4,cy-4*k,w/2.2,2*k); };
+  const pin=(X,base,h,c)=>{ const et=h>22*k?4:h>12*k?3:1, he=h/et; for(let i=0;i<h;i++){ const e=Math.floor(i/he), l=1+Math.floor((i-e*he)*.5+e*he*.26)*2; px(c,X-(l>>1),base-h+i,l,1); } px(c,X-k/2,base,Math.max(1,k),2*k); };
+  // ciel en bandes, avec un tramage d'une ligne entre deux teintes
+  const n=P.ciel.length, bh=H/n;
+  for(let i=0;i<n;i++){ px(P.ciel[i],0,Math.floor(i*bh),W,Math.ceil(bh)+1); }
+  for(let i=1;i<n;i++){ const Y=Math.floor(i*bh); for(let X=0;X<W;X+=2){ px(P.ciel[i],X,Y-1); px(P.ciel[i-1],X+1,Y); } }
+  for(let i=0;i<(P.etoiles||0);i++) px(r()>.3?"#ffffff":"#9fb0ff", r()*W, r()*H*.7);
+  if(P.astre){ const [ax,ay,ar,ac]=P.astre; disque("rgba(255,255,255,.14)",ax*W,ay*H,Math.round(ar*k*1.7)); disque(ac,ax*W,ay*H,Math.round(ar*k)); }
+  for(let i=0;i<(P.nuages||0);i++) nuage(r()*W, H*(.12+r()*.25), (18+r()*16)*k);
+  // plans de relief
+  const sommets=[];
+  P.couches.forEach(([col,y,amp,f,cap])=>{
+    const p1=r()*6.28, p2=r()*6.28, tops=[];
+    for(let X=0;X<W;X++){ const t=Math.round(H*y + amp*k*(Math.sin(X*f/k+p1)*.6+Math.sin(X*f*2.7/k+p2)*.4)); tops.push(t); px(col,X,t,1,H-t); if(cap && t<H*y-amp*k*.2) px(cap,X,t,1,Math.max(1,(H*y-amp*k*.2-t)*.6)); }
+    sommets.push(tops);
+  });
+  const sol=sommets[sommets.length-1] || Array(W).fill(Math.round(H*.8));
+  // détail de premier plan
+  const D=P.deco;
+  if(D==="pins"||D==="flocons"){ const nb=D==="pins"?7:4; for(let i=0;i<nb;i++){ const X=Math.floor(r()*W); pin(X, sol[X]+2*k, (9+r()*9)*k, D==="pins"?"rgba(4,14,12,.72)":"#3a5a7a"); } }
+  if(D==="flocons") for(let i=0;i<34*k;i++) px("#ffffff", r()*W, r()*H);
+  if(D==="fleurs"){ for(let i=0;i<22*k;i++){ const X=Math.floor(r()*W); px(["#ffffff","#ffe45c","#ff9cc0","#ffd0a0"][i%4], X, sol[X]+2+r()*(H-sol[X]-3)); } for(let i=0;i<10*k;i++){ const X=Math.floor(r()*W); px("#2a7a40",X,sol[X]-2*k,1,3*k); } }
+  if(D==="cristaux"){ for(let i=0;i<9;i++){ const X=r()*W, h=(6+r()*16)*k; for(let j=0;j<h;j++) px("#0a0818", X-(h-j)/5, j, (h-j)/2.5+1, 1); }
+    for(let i=0;i<6;i++){ const X=Math.floor(r()*W), h=Math.round((4+r()*6)*k), b=sol[X]+2*k; disque("rgba(111,232,255,.16)",X,b-h/2,h); for(let j=0;j<h;j++){ const l=Math.max(1,Math.round((1-Math.abs(j-h*.35)/(h*.7))*3*k)); px(j<h*.35?"#d8fbff":"#6fe8ff", X-(l>>1), b-h+j, l, 1); } } }
+  if(D==="vagues"){ const y0=Math.round(H*.56), mer=["#3f86c8","#2a6fb0","#1f5a9a","#174a84","#103a6c"]; mer.forEach((c,i)=>px(c,0,y0+i*(H-y0)/mer.length,W,(H-y0)/mer.length+1));
+    for(let i=0;i<40*k;i++){ const Y=y0+r()*(H-y0), t=(Y-y0)/(H-y0); px("rgba(255,255,255,.55)", r()*W, Y, (2+t*7)*k, 1); }
+    for(let Y=y0;Y<H;Y+=2){ const t=(Y-y0)/(H-y0); px("#fff3c0", W*.5-(2+t*9)*k+ (r()-.5)*4*k, Y, (4+t*16)*k*(.4+r()*.6), 1); } }
+  if(D==="riviere"){ const y0=Math.round(H*.6); for(let Y=y0;Y<H;Y++){ const t=(Y-y0)/(H-y0), cx=W*.5+Math.sin(t*4.2+1)*W*.16*(1-t*.4), l=(2+t*26)*k; px("#4aa8e8",cx-l/2,Y,l,1); px("#9fdcff",cx-l/2,Y,Math.max(1,l*.14),1); if(r()>.72) px("#ffffff",cx-l/2+r()*l,Y,2*k,1); }
+    for(let i=0;i<5;i++){ const X=Math.floor(r()*W); pin(X, sol[X]+2*k, (7+r()*6)*k, "rgba(6,30,18,.7)"); } }
+  if(D==="dunes"){ for(let i=0;i<26*k;i++){ const X=Math.floor(r()*W); px("rgba(255,240,200,.5)", X, sol[X]+1+r()*(H-sol[X]-2), (3+r()*6)*k, 1); } }
+  if(D==="lave"){ const c0=sommets[0]; let xm=0; c0.forEach((t,i)=>{ if(t<c0[xm]) xm=i; }); const ym=c0[xm];
+    disque("rgba(255,120,40,.22)",xm,ym,Math.round(15*k)); disque("rgba(255,200,80,.3)",xm,ym,Math.round(7*k)); px("#ffd060",xm-3*k,ym,6*k,2*k);
+    let X=xm; for(let Y=ym+2*k;Y<H*.72;Y++){ X+=Math.round((r()-.5)*2.2); px("#ff8a30",X,Y,2*k,1); px("#ffd060",X,Y,1,1); }
+    for(let i=0;i<26*k;i++) px(r()>.5?"#ffb040":"#ff6020", xm+(r()-.5)*50*k, ym-r()*34*k); }
+  if(D==="nuages"){ for(let i=0;i<9;i++){ const t=i/8; nuage(r()*W, H*(.3+t*.68), (20+t*46)*k, "rgba(255,255,255,.95)", "rgba(190,210,250,.85)"); } }
+  if(D==="colonnes"){ for(let i=0;i<5;i++){ const X=Math.floor((.1+i*.2+ (r()-.5)*.08)*W), h=Math.round((10+r()*20)*k), b=sol[Math.min(W-1,X)]+3*k, l=Math.round(4*k);
+      px("#c8d0ee",X,b-h,l,h); px("#8a94c0",X+l-Math.max(1,k),b-h,Math.max(1,k),h); px("#e8ecff",X-k,b-h,l+2*k,2*k); px("#9aa4d0",X-k,b-2*k,l+2*k,2*k); if(r()>.5) px(P.ciel[2],X,b-h,l*.6,3*k); } }
+  if(D==="nebuleuse"){ for(let i=0;i<7;i++) disque(["rgba(255,90,200,.12)","rgba(111,232,255,.1)","rgba(160,110,255,.14)"][i%3], r()*W, r()*H, Math.round((10+r()*16)*k));
+    const cx=W*.68, cy=H*.42, R=Math.round(11*k); disque("#f0a060",cx,cy,R); disque("#f8c888",cx-2*k,cy-2*k,Math.round(R*.55)); px("#ffe8c0",cx-R*1.7,cy,R*3.4,Math.max(1,k)); px("#f0a060",cx-R*.8,cy-k,R*1.6,Math.max(1,k)); }
+  if(D==="arche"){
+    const cx=Math.round(W*.5), base=sol[cx]+2*k, larg=Math.round(H*.15), haut=Math.round(H*.36);
+    // chemin qui mène l'œil du bas de l'image vers l'arche
+    for(let Y=base;Y<H;Y++){ const t=(Y-base)/(H-base), l=(4+t*46)*k, d=Math.sin(t*3)*8*k*t; px("#6a5a8a",cx-l/2+d,Y,l,1); px("#9a86b0",cx-l/2+d,Y,Math.max(1,l*.18),1); }
+    // halo, puis l'arche de pierre et sa lueur
+    disque("rgba(111,232,255,.10)",cx,base-haut*.55,Math.round(H*.34)); disque("rgba(111,232,255,.14)",cx,base-haut*.55,Math.round(H*.22));
+    for(let Y=0;Y<haut;Y++){ const t=Y/haut, l=Math.round(larg*(t<.3?Math.sin((t/.3)*Math.PI/2):1)); px(["#e8ffff","#a8f4ff","#6fe8ff","#4ab8f0"][Math.min(3,Math.floor(t*4))], cx-l/2, base-haut+Y, l, 1); }
+    const pil=Math.max(2,Math.round(H*.035)); px("#8a86b8",cx-larg/2-pil,base-haut*.78,pil,haut*.78); px("#8a86b8",cx+larg/2,base-haut*.78,pil,haut*.78);
+    px("#55528a",cx+larg/2+pil-Math.max(1,k),base-haut*.78,Math.max(1,k),haut*.78); px("#55528a",cx-larg/2-Math.max(1,k),base-haut*.78,Math.max(1,k),haut*.78);
+    for(let a=0;a<=20;a++){ const an=Math.PI*a/20, R=larg/2+pil; px("#a8a4d0", cx-Math.cos(an)*R-pil/2, base-haut*.78-Math.sin(an)*R, pil, pil); }
+    px("#c8c4e8",cx-pil/2,base-haut*.78-larg/2-pil*1.6,pil,pil);
+    // grands sapins sombres sur les bords : ils encadrent la scène
+    [[.03,.6],[.11,.42],[.19,.27],[.97,.62],[.89,.44],[.82,.26]].forEach(([fx,h])=>pin(Math.round(fx*W), H+2, h*H, "#0a0e26"));
+  }
+}
+// Blason : un écu à la couleur du type, avec un chevron et 1 à 3 gemmes selon la rareté.
+function blason(cv, type, rang){
+  const x=cv.getContext("2d"), col=(TYPES[type]||TYPES.normal)[1]; x.clearRect(0,0,20,24);
+  const larg=Y=>Y<13?18:Math.max(2,18-(Y-12)*1.7);
+  for(let Y=0;Y<24;Y++){ const l=Math.round(larg(Y)), X=Math.round(10-l/2); x.fillStyle="#0a1226"; x.fillRect(X-1,Y,l+2,1); }
+  for(let Y=1;Y<23;Y++){ const l=Math.round(larg(Y))-2, X=Math.round(10-l/2); if(l<1) continue; x.fillStyle=col; x.fillRect(X,Y,l,1); x.fillStyle="rgba(255,255,255,.38)"; x.fillRect(X,Y,Math.max(1,Math.round(l*.22)),1); x.fillStyle="rgba(0,0,0,.22)"; x.fillRect(X+l-Math.max(1,Math.round(l*.2)),Y,Math.max(1,Math.round(l*.2)),1); }
+  x.fillStyle="rgba(255,255,255,.85)"; for(let i=0;i<7;i++){ x.fillRect(3+i,13-Math.min(i,6-i)+3,1,2); x.fillRect(10+i,10+Math.min(i,6-i)+0,1,2); }
+  x.fillStyle="#f4f6ff"; x.fillRect(2,1,16,1);
+  const gx=10-(rang*4-1)/2; for(let i=0;i<rang;i++){ x.fillStyle="#0a1226"; x.fillRect(Math.round(gx+i*4)-1,4,5,5); x.fillStyle="#ffe45c"; x.fillRect(Math.round(gx+i*4),5,3,3); x.fillStyle="#fff8c8"; x.fillRect(Math.round(gx+i*4),5,1,1); }
+}
+// Dessine tous les canvas marqués dans un bloc qu'on vient d'insérer.
+function peindre(racine){
+  racine.querySelectorAll("canvas[data-h]").forEach(c=>scene(c,c.dataset.h,c.dataset.s||""));
+  racine.querySelectorAll("canvas[data-t]").forEach(c=>blason(c,c.dataset.t,+c.dataset.r||1));
+}
+
+// Fond : la scène du portail, peinte une fois, puis animée par des lucioles et le souffle de la lueur.
+(function fond(){
+  const c=document.getElementById("bg"), x=c.getContext("2d"), W=c.width, H=c.height;
+  scene(c,"portail","accueil");
+  const base=x.getImageData(0,0,W,H), r=alea("lucioles"), L=[];
+  for(let i=0;i<26;i++) L.push({x:r()*W, y:H*.5+r()*H*.48, p:r()*6.28, v:.2+r()*.5});
+  if(matchMedia("(prefers-reduced-motion:reduce)").matches) return;
+  (function boucle(t){
+    x.putImageData(base,0,0);
+    const s=.5+.5*Math.sin(t/900); x.fillStyle=`rgba(200,250,255,${.10+.14*s})`; x.fillRect(Math.round(W/2-H*.075),Math.round(H*.48),Math.round(H*.15),Math.round(H*.33));
+    L.forEach(l=>{ const X=l.x+Math.sin(t/1400*l.v+l.p)*9, Y=l.y+Math.cos(t/1700*l.v+l.p)*6; if(Math.sin(t/500+l.p)>-.3){ x.fillStyle="rgba(255,240,150,.35)"; x.fillRect(Math.round(X)-1,Math.round(Y)-1,3,3); x.fillStyle="#fff6a0"; x.fillRect(Math.round(X),Math.round(Y),1,1); } });
+    requestAnimationFrame(boucle);
+  })(0);
+})();
+
+/* ==========================================================================
+   SON (petits bips générés, aucun fichier)
+   ========================================================================== */
+let sonActif=true, actx=null;
+function bip(f=660,d=.04,type="square",vol=.03){
+  if(!sonActif) return;
+  try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); const o=actx.createOscillator(), g=actx.createGain();
+    o.type=type; o.frequency.value=f; g.gain.value=vol; o.connect(g); g.connect(actx.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(.0001, actx.currentTime+d); o.stop(actx.currentTime+d+.02); }catch(e){}
+}
+const fanfare=()=>[523,659,784,1047].forEach((f,i)=>setTimeout(()=>bip(f,.14,"square",.04),i*110));
+document.getElementById("snd").onclick=e=>{ sonActif=!sonActif; e.currentTarget.textContent="Son : "+(sonActif?"oui":"non"); e.currentTarget.setAttribute("aria-pressed",sonActif); };
+
+/* ==========================================================================
+   MOTEUR DE DIALOGUE
+   ========================================================================== */
+const $=id=>document.getElementById(id);
+const elText=$("text"), elMore=$("more"), elChoices=$("choices"), elPanel=$("panel"), elDialog=$("dialog");
+let avance=null, menu=null;
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+function panneau(html, sombre=true){ elPanel.innerHTML=html; peindre(elPanel); document.body.classList.toggle("sombre", sombre && !!html); }
+
+// Balises de couleur dans les textes : {y}jaune{/}  {c}cyan{/}  {g}vert{/}
+function segments(txt){ const out=[]; const re=/\{([ycg])\}(.*?)\{\/\}/gs; let i=0,m; while((m=re.exec(txt))){ if(m.index>i) out.push([txt.slice(i,m.index),""]); out.push([m[2],m[1]]); i=re.lastIndex; } if(i<txt.length) out.push([txt.slice(i),""]); return out; }
+function ecrire(txt){
+  return new Promise(res=>{
+    elText.textContent=""; elMore.classList.remove("on");
+    const segs=segments(txt); let si=0, ci=0, span=null, fini=false, n=0;
+    const tout=()=>{ elText.textContent=""; segs.forEach(([t,k])=>{ const s=document.createElement("span"); if(k) s.className=k; s.textContent=t; elText.appendChild(s); }); fini=true; clearInterval(tm); res(); };
+    const tm=setInterval(()=>{
+      if(si>=segs.length){ fini=true; clearInterval(tm); avance=null; res(); return; }
+      if(!span){ span=document.createElement("span"); if(segs[si][1]) span.className=segs[si][1]; elText.appendChild(span); }
+      span.textContent+=segs[si][0][ci++]; if(++n%3===0) bip(520,.02,"square",.015);
+      if(ci>=segs[si][0].length){ si++; ci=0; span=null; }
+    }, 20);
+    avance=()=>{ if(!fini){ avance=null; tout(); } };
+  });
+}
+async function dire(txt){
+  await ecrire(txt); elMore.classList.add("on");
+  await new Promise(res=>{ avance=()=>{ avance=null; bip(880,.05); res(); }; });
+  elMore.classList.remove("on");
+}
+async function demander(txt, options){
+  await ecrire(txt);
+  return new Promise(res=>{
+    elChoices.innerHTML=""; elChoices.classList.add("on"); let sel=0;
+    const btns=options.map((o,i)=>{ const b=document.createElement("button"); b.className="opt"; b.type="button"; b.textContent=o; b.onmouseenter=()=>choisir(i); b.onclick=()=>valider(i); elChoices.appendChild(b); return b; });
+    function choisir(i){ sel=(i+btns.length)%btns.length; btns.forEach((b,k)=>b.classList.toggle("sel",k===sel)); }
+    function valider(i){ menu=null; elChoices.classList.remove("on"); elChoices.innerHTML=""; bip(880,.06); res(i); }
+    menu={ haut:()=>{choisir(sel-1); bip(440,.03);}, bas:()=>{choisir(sel+1); bip(440,.03);}, ok:()=>valider(sel) };
+    choisir(0);
+  });
+}
+// Pose une question et attend un texte tapé au clavier.
+async function saisir(txt, max=16){
+  await ecrire(txt);
+  return new Promise(res=>{
+    elChoices.innerHTML=`<div class="saisie"><input type="text" maxlength="${max}" autocomplete="off" spellcheck="false" aria-label="Réponse"><button class="iconbtn" type="button">OK</button></div>`;
+    elChoices.classList.add("on");
+    const inp=elChoices.querySelector("input"), ok=()=>{ const v=inp.value.trim(); if(!v) return; elChoices.classList.remove("on"); elChoices.innerHTML=""; bip(880,.06); res(v); };
+    elChoices.querySelector("button").onclick=ok; inp.onkeydown=e=>{ if(e.key==="Enter") ok(); }; inp.focus();
+  });
+}
+elDialog.addEventListener("click",()=>{ if(avance) avance(); });
+document.addEventListener("keydown",e=>{
+  if(e.target.tagName==="INPUT" || (e.target.closest && e.target.closest(".grid"))) return;
+  if(menu){ if(e.key==="ArrowUp"){e.preventDefault(); menu.haut();} else if(e.key==="ArrowDown"){e.preventDefault(); menu.bas();} else if(e.key==="Enter"||e.key===" "){e.preventDefault(); menu.ok();} return; }
+  if((e.key==="Enter"||e.key===" ") && avance){ e.preventDefault(); avance(); }
+});
+
+/* ==========================================================================
+   LIAISON AVEC LE BOT (ou mode démonstration si API_URL est vide)
+   ========================================================================== */
+const DEMO=!CONFIG.API_URL;
+const mem={ lire(k){ try{ return sessionStorage.getItem(k); }catch(e){ return null; } }, ecrire(k,v){ try{ v==null?sessionStorage.removeItem(k):sessionStorage.setItem(k,v); }catch(e){} } };
+function jeton(){ const h=new URLSearchParams(location.hash.slice(1)); if(h.get("access_token")){ mem.ecrire("jeton",h.get("access_token")); history.replaceState(null,"",location.pathname+location.search); } return mem.lire("jeton"); }
+function connexionDiscord(){ const u=new URL("https://discord.com/oauth2/authorize"); u.search=new URLSearchParams({client_id:CONFIG.DISCORD_CLIENT_ID, response_type:"token", scope:"identify", redirect_uri:location.origin+location.pathname}); location.href=u; }
+async function appel(chemin, corps){
+  const rep=await fetch(CONFIG.API_URL.replace(/\/+$/,"")+chemin,{ method:corps?"POST":"GET", headers:{Authorization:"Bearer "+mem.lire("jeton"),"Content-Type":"application/json"}, body:corps?JSON.stringify(corps):undefined });
+  const d=await rep.json().catch(()=>({erreur:"Réponse illisible du bot."}));
+  if(rep.status===401){ mem.ecrire("jeton",null); const e=new Error(d.erreur||"Connexion expirée."); e.reconnexion=true; throw e; }
+  if(!rep.ok) throw new Error(d.erreur||"Le bot a répondu par une erreur.");
+  return d;
+}
+// Faux bot pour essayer la page sans rien installer.
+const demo={ profil:null, lien:{mc:null,mcVerifie:false},
+  P:{ commun:[["Roucool","vol","prairie"],["Racaillou","roche","grotte"],["Goélise","eau","ocean"],["Mystherbe","plante","foret"],["Axoloto","eau","riviere"]], rare:[["Riolu","combat","montagne"],["Farfuret","glace","neige"],["Griknot","dragon","desert"],["Pyronille","feu","volcan"],["Mimiqui","spectre","ruines"]], legend:[["Électhor","electrik","ciel"],["Giratina","spectre","cosmos"],["Lugia","psy","ocean"],["Entei","feu","volcan"],["Xerneas","fee","foret"]] },
+  moi(){ return {utilisateur:{id:"0",nom:"Invité",avatar:null}, lien:this.lien, rcon:false, profil:this.profil}; },
+  tirage(c){ const t={}; for(const k in this.P){ const [fr,type,habitat]=this.P[k][Math.floor(Math.random()*5)]; t[k]={fr,id:fr,type,habitat}; }
+    this.profil={id:"0",nom:"Invité",avatar:null,mc:null,mcVerifie:false,...c,cibles:t,captures:{commun:false,rare:false,legend:false}}; return {profil:this.profil}; },
+  lier(p){ this.lien={mc:p,mcVerifie:false}; if(this.profil) this.profil.mc=p; return {mode:"declare",mc:p}; },
+  tableau(){ return {saison:"démonstration", joueurs:this.profil?[this.profil]:[]}; } };
+const BOT={
+  moi:()=>DEMO?demo.moi():appel("/api/me"),
+  tirage:c=>DEMO?demo.tirage(c):appel("/api/tirage",c),
+  lier:p=>DEMO?demo.lier(p):appel("/api/lier",{pseudo:p}),
+  confirmer:c=>appel("/api/confirmer",{code:c}),
+  tableau:()=>DEMO?demo.tableau():appel("/api/tableau")
+};
+
+/* ==========================================================================
+   ÉCRANS
+   ========================================================================== */
+const art=(hab,graine,type,rang,tag,col)=>`<div class="art"><canvas class="sc" width="108" height="64" data-h="${hab}" data-s="${esc(graine)}"></canvas>${type?`<canvas class="bl" width="20" height="24" data-t="${type}" data-r="${rang}"></canvas>`:""}<span class="tag" style="color:${col}">${tag}</span></div>`;
+function carteStarter(s){
+  return `<div class="cards"><div class="card box pop">${art(DECOR_STARTER[s.el], s.nom, s.el, 1, "Starter", (TYPES[s.el])[1])}
+    <div class="nm">${esc(s.nom)}</div><div class="sub">Type ${TYPES[s.el][0]} · ${REGIONS[s.gen]}<br>Nature ${esc(s.nature)}</div></div></div>`;
+}
+function cartesCibles(c, visibles){
+  return `<div class="cards">`+RARETES.map(([k,lab,col,rang],i)=>{ const p=c[k], vu=i<visibles;
+    return `<div class="card box ${vu?"":"hidden"} ${i===visibles-1?"pop":""}">${art(vu?p.habitat:"cosmos", vu?p.fr:"mystere"+i, vu?p.type:"", rang, "Cible "+lab, col)}
+      <div class="nm">${vu?esc(p.fr):"?"}</div><div class="sub">${vu?`Type ${(TYPES[p.type]||TYPES.normal)[0]} · ${HABITATS[p.habitat]||""}`:"…"}</div></div>`; }).join("")+`</div>`;
+}
+function carteDresseur(p){
+  const s=STARTERS.find(x=>x.nom===p.starter)||{el:p.element,nom:p.starter};
+  return `<div class="dresseur box pop"><div class="bandeau"><canvas width="240" height="48" data-h="${DECOR_STARTER[s.el]||"prairie"}" data-s="${esc(p.nom)}"></canvas>
+      <div class="id">${p.avatar?`<img src="${esc(p.avatar)}" alt="">`:""}<div><h2>${esc(p.nom)}</h2><small>Carte de dresseur</small></div></div></div>
+    <div class="corps"><div class="ligne"><span>Nature</span><b>${esc(p.nature)}</b></div>
+      <div class="ligne"><span>Starter</span><b style="color:${(TYPES[s.el]||TYPES.normal)[1]}">${esc(p.starter)}</b></div>
+      <div class="ligne"><span>Compte Minecraft</span><b>${p.mc?esc(p.mc)+(p.mcVerifie?" (vérifié)":" (déclaré)"):"non lié"}</b></div>
+      <div class="minis">${RARETES.map(([k,lab,col])=>`<div class="mini ${p.captures&&p.captures[k]?"ok":""}"><canvas width="72" height="28" data-h="${p.cibles[k].habitat}" data-s="${esc(p.cibles[k].fr)}"></canvas><b>${esc(p.cibles[k].fr)}</b><i style="color:${col}">${p.captures&&p.captures[k]?"Capturé":lab}</i></div>`).join("")}</div>
+    </div></div>`;
+}
+function tableauHTML(t){
+  if(!t.joueurs.length) return `<div class="tableau box"><h2>Tableau de chasse</h2>Personne n'a encore passé le portail.</div>`;
+  return `<div class="tableau box"><h2>Tableau de chasse <small class="c" style="font-size:15px">· ${esc(t.saison)}</small></h2>`+t.joueurs.map(j=>`<div class="rang"><div class="pj"><b>${esc(j.nom)}</b><small>${esc(j.starter)}${j.mc?" · "+esc(j.mc):""}</small></div>`+
+    RARETES.map(([k,,col])=>`<div><span class="pastille" style="background:${j.captures[k]?"var(--green)":col}"></span>${esc(j.cibles[k].fr)}${j.captures[k]?" ✔":""}</div>`).join("")+`</div>`).join("")+`</div>`;
+}
+function choisirALaMain(){
+  return new Promise(res=>{
+    let h=`<div class="grid box">`;
+    REGIONS.forEach((reg,g)=>{ h+=`<div class="gen">${g+1} · ${reg}</div>`; STARTERS.filter(s=>s.gen===g).forEach(s=>{ h+=`<button class="cell" type="button" data-n="${esc(s.nom)}" style="--el:${TYPES[s.el][1]}">${esc(s.nom)}</button>`; }); });
+    panneau(h+`</div>`);
+    elPanel.querySelectorAll(".cell").forEach(b=>b.onclick=()=>{ bip(880,.06); res(STARTERS.find(s=>s.nom===b.dataset.n)); });
+  });
+}
+// Le starter dont le profil de traits ressemble le plus aux réponses données.
+function starterPour(traits, trace){
+  const r=alea(trace); let mieux=[], max=-1;
+  STARTERS.forEach(s=>{ let pts=0, norme=0; for(const t in s.profil){ pts+=(traits[t]||0)*s.profil[t]; norme+=s.profil[t]*s.profil[t]; } pts/=Math.sqrt(norme);
+    if(pts>max+1e-9){ max=pts; mieux=[s]; } else if(Math.abs(pts-max)<1e-9) mieux.push(s); });
+  return mieux[Math.floor(r()*mieux.length)];
+}
+
+async function lierMinecraft(etat){
+  const pseudo=await saisir("Quel est ton pseudo Minecraft exact ?", 16);
+  try{
+    const r=await BOT.lier(pseudo);
+    if(r.mode==="code"){
+      await dire("Un code à quatre chiffres vient de s'afficher dans ton chat Minecraft.");
+      const code=await saisir("Tape ce code ici.", 4);
+      await BOT.confirmer(code);
+      await dire(`C'est vérifié. Ton compte Minecraft {y}${pseudo}{/} est lié à ton compte Discord.`);
+    } else await dire(`C'est noté : {y}${pseudo}{/}. Le lien sera vérifié en jeu quand le serveur sera relié au Portail.`);
+  }catch(e){ await dire("{y}Ça n'a pas marché.{/} "+e.message); }
+}
+async function accueilConnu(){
+  for(;;){
+    const etat=await BOT.moi(), p=etat.profil;
+    panneau(carteDresseur(p));
+    const k=await demander(`Te revoilà, {y}${p.nom}{/}. Que veux-tu faire ?`, [p.mc?"Changer de compte Minecraft":"Lier mon compte Minecraft", "Voir le tableau de chasse", "Revoir mes cibles"]);
+    if(k===0) await lierMinecraft(etat);
+    if(k===1){ panneau(tableauHTML(await BOT.tableau())); await dire("Voici les cibles de tout le monde. Une cible cochée a été capturée."); }
+    if(k===2){ panneau(cartesCibles(p.cibles,3)); await dire(`Tes trois cibles : {y}${p.cibles.commun.fr}{/}, {c}${p.cibles.rare.fr}{/} et {y}${p.cibles.legend.fr}{/}.`); }
+  }
+}
+
+async function demarrer(){
+  $("srv").textContent=CONFIG.NOM_SERVEUR;
+  panneau(`<div class="title"><h1>LE PORTAIL</h1><p>${esc(CONFIG.NOM_SERVEUR)}</p></div>`, false);
+  const j=jeton();
+  await dire("Salut, voyageur. Tu es devant le portail du serveur.");
+  if(!DEMO && !j){
+    await demander("Pour que je te reconnaisse, montre-moi ton compte Discord. Je ne lis que ton nom et ton avatar.", ["Se connecter avec Discord"]);
+    await ecrire("Je t'emmène chez Discord…"); connexionDiscord(); return;
+  }
+  let etat;
+  try{ etat=await BOT.moi(); }
+  catch(e){ await demander("{y}Je n'arrive pas à te reconnaître.{/} "+e.message, [e.reconnexion?"Me reconnecter":"Réessayer"]); if(e.reconnexion) connexionDiscord(); else location.reload(); return; }
+  const moi=etat.utilisateur;
+  $("qui").style.display="flex"; $("qui").innerHTML=(moi.avatar?`<img src="${esc(moi.avatar)}" alt="">`:"")+esc(moi.nom);
+  if(etat.profil) return accueilConnu();
+
+  // --- Quiz
+  await dire(`Enchanté, {y}${moi.nom}{/}. Avant de te laisser passer, j'ai quelques questions. Réponds sans réfléchir : il n'y a pas de mauvaise réponse.`);
+  panneau("");
+  const tirage=melange(QUESTIONS.map((_,i)=>i), moi.id+"|"+Date.now()).slice(0,NB_QUESTIONS);
+  const traits={}; let trace="";
+  for(let n=0;n<tirage.length;n++){
+    const [q,reps]=QUESTIONS[tirage[n]], ordre=melange(reps.map((_,i)=>i), moi.id+n+Date.now());
+    const k=await demander(`{c}Question ${n+1} sur ${tirage.length}{/}\n${q}`, ordre.map(i=>reps[i][0]));
+    const [,t1,t2]=reps[ordre[k]]; traits[t1]=(traits[t1]||0)+2; traits[t2]=(traits[t2]||0)+1; trace+=tirage[n]+"-"+ordre[k]+"|";
+  }
+  let s=starterPour(traits, trace), accepte=true;
+  await dire("Merci. Laisse-moi regarder ce que tes réponses racontent…");
+  await dire(`Tu sembles être de nature… {y}${s.nature}{/} !`);
+  await dire(s.txt);
+  fanfare(); panneau(carteStarter(s));
+  if(await demander(`Le compagnon qui te ressemble, c'est {y}${s.nom}{/}. Tu pars avec lui ?`, ["Oui, on y va ensemble !","Non, je préfère choisir moi-même."])===1){
+    accepte=false;
+    const p=ecrire("Très bien. Choisis ton compagnon parmi les neuf régions.");
+    s=await choisirALaMain(); await p;
+    panneau(carteStarter(s)); fanfare();
+    await dire(`{y}${s.nom}{/}, de nature {c}${s.nature}{/}. ${s.txt}`);
+  }
+
+  // --- Tirage des cibles par le bot
+  await dire("Une dernière chose. Chaque voyageur reçoit trois cibles à capturer, tirées au sort. Personne n'aura les mêmes que toi.");
+  await demander("Prêt à tirer tes cibles ? Le tirage est définitif pour toute la saison.", ["Tirer mes trois cibles"]);
+  await ecrire("Les dés roulent…");
+  let profil;
+  for(;;){
+    try{ profil=(await BOT.tirage({nature:s.nature, element:s.el, starter:s.nom, accepte})).profil; break; }
+    catch(e){ await demander("{y}Le tirage n'est pas passé.{/} "+e.message, ["Réessayer"]); if(e.reconnexion){ connexionDiscord(); return; } await ecrire("Les dés roulent…"); }
+  }
+  const c=profil.cibles;
+  panneau(cartesCibles(c,0)); await pause(400);
+  panneau(cartesCibles(c,1)); bip(660,.1);
+  await dire(`Ta cible commune : {y}${c.commun.fr}{/}. Un bon début pour se faire la main.`);
+  panneau(cartesCibles(c,2)); bip(784,.1);
+  await dire(`Ta cible rare : {c}${c.rare.fr}{/}. Il faudra chercher un peu.`);
+  panneau(cartesCibles(c,3)); fanfare();
+  await dire(`Et ta cible légendaire : {y}${c.legend.fr}{/}. Celle-là, c'est l'aventure d'une saison.`);
+  await dire(DEMO?"En mode démonstration, rien n'est envoyé sur Discord.":"Tout le monde vient d'être prévenu sur Discord.");
+  panneau(carteDresseur(profil)); fanfare();
+  await dire(`Le portail est ouvert. En jeu, choisis bien {y}${profil.starter}{/} comme starter.`);
+  if(!etat.lien.mc && await demander("Veux-tu lier ton compte Minecraft maintenant ? C'est ce qui permettra d'afficher tes cibles en jeu.", ["Oui, je le lie","Plus tard"])===0) await lierMinecraft(etat);
+  return accueilConnu();
+}
+demarrer();
+</script>
+</body>
+</html>
