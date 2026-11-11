@@ -772,8 +772,10 @@ function choisirALaMain(){
 }
 // Le starter dont le profil de traits ressemble le plus aux réponses données.
 function plusProche(liste, profilDe, traits, trace){
-  const r=alea(trace); let mieux=[], max=-1;
-  liste.forEach(s=>{ const pr=profilDe(s); let pts=0, norme=0; for(const t in pr){ pts+=(traits[t]||0)*pr[t]; norme+=pr[t]*pr[t]; } pts/=Math.sqrt(norme);
+  // On compare chaque trait à la moyenne du joueur : sinon un profil plat tombe toujours sur les mêmes résultats.
+  const cles=Object.keys(TRAITS_NOMS), moy=cles.reduce((s,k)=>s+(traits[k]||0),0)/cles.length;
+  const r=alea(trace); let mieux=[], max=-Infinity;
+  liste.forEach(s=>{ const pr=profilDe(s); let pts=0, norme=0; for(const t in pr){ pts+=((traits[t]||0)-moy)*pr[t]; norme+=pr[t]*pr[t]; } pts/=Math.sqrt(norme);
     if(pts>max+1e-9){ max=pts; mieux=[s]; } else if(Math.abs(pts-max)<1e-9) mieux.push(s); });
   return mieux[Math.floor(r()*mieux.length)];
 }
@@ -880,6 +882,7 @@ async function accueilConnu(){
     const etat=await BOT.moi(), p=etat.profil;
     panneau(carteDresseur(p));
     const k=await demander(`Te revoilà, {y}${p.nom}{/}. Que veux-tu faire ?`, ["Revoir mes cibles","Voir mes défis","Voir le tableau de chasse", p.mc?"Changer de compte Minecraft":"Lier mon compte Minecraft","Télécharger ma carte en image"]);
+    if(!accueilConnu.envoyee){ accueilConnu.envoyee=true; envoyerCarte(p); }   // l'image gardée par le bot pour /carte est rafraîchie à chaque visite
     if(k===0){ panneau(cartesCibles(p.cibles,RARETES.length)); await dire("Tes cibles de la saison. Une cible évoluée peut s'obtenir en faisant évoluer sa forme de base."); }
     if(k===1){ panneau(defisHTML(p)); await dire(p.typeEquipe?`Ton caractère t'a donné le type {y}${p.typeEquipeNom||nomType(p.typeEquipe)}{/}, et des défis à ta mesure.`:"Ton profil date d'avant les défis : tu en recevras à la prochaine saison."); }
     if(k===2){ panneau(tableauHTML(await BOT.tableau())); await dire("Voici les cibles de tout le monde. Une cible cochée a été capturée."); }
@@ -958,8 +961,8 @@ async function demarrer(){
     const perso=(profil.defis||[]).filter(d=>d.trait);
     if(perso.length) await dire(`Et parce que tu es fait ${de(perso[0].trait)}${perso[1]?" et "+de(perso[1].trait):""}, deux défis rien que pour toi t'attendent.`);
   }
-  await dire(DEMO?"En mode démonstration, rien n'est envoyé sur Discord.":"Tout le monde vient d'être prévenu sur Discord, et ta carte de dresseur y arrive dans un instant.");
-  panneau(carteDresseur(profil)); fanfare(); confettis(); envoyerCarte(profil);
+  await dire(DEMO?"En mode démonstration, rien n'est envoyé sur Discord.":"Tout le monde vient d'être prévenu sur Discord, et ta carte de dresseur y arrive dans un instant. Tu as aussi reçu ton rôle {y}Dresseur{/} et celui de ton archétype.");
+  panneau(carteDresseur(profil)); fanfare(); confettis(); accueilConnu.envoyee=true; envoyerCarte(profil);
   await dire(`Le portail est ouvert. En jeu, choisis bien {y}${profil.starter}{/} comme starter.`);
   if(!etat.lien.mc && await demander("Veux-tu lier ton compte Minecraft maintenant ? C'est ce qui permettra d'afficher tes cibles en jeu.", ["Oui, je le lie","Plus tard"])===0) await lierMinecraft();
   return accueilConnu();
