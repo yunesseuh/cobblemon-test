@@ -598,6 +598,7 @@ const demo={ profil:null, lien:{mc:null,mcVerifie:false},
   tirage(c){ const t={}; for(const k in this.P){ const [fr,type,habitat]=this.P[k][Math.floor(Math.random()*5)]; t[k]={fr,id:fr,type,habitat,shiny:k==="shiny"}; }
     const typeEquipe=plusProche(Object.keys(TYPES_PROFIL), k=>TYPES_PROFIL[k], c.traits, "demo"), [a,b]=dominants(c.traits);
     this.profil={id:"0",nom:"Invité",avatar:null,mc:this.lien.mc,mcVerifie:false,...c,cibles:t,captures:{}, typeEquipe, typeEquipeNom:nomType(typeEquipe),
+      build:{id:"phare",emoji:"🗼",nom:"Le phare",quartier:"Bord de mer",idee:"Le repère qu'on voit de loin pour rentrer au village."},
       defis:[{id:"equipe",txt:"Monter une équipe de 6 Pokémon de type "+nomType(typeEquipe),fait:false},{id:"style1",trait:a,txt:this.D[a],fait:false},{id:"style2",trait:b,txt:this.D[b],fait:false}]}; return {profil:this.profil}; },
   lier(p){ this.lien={mc:p,mcVerifie:false}; if(this.profil) this.profil.mc=p; return {mode:"declare",mc:p}; },
   tableau(){ return {saison:"démonstration", joueurs:this.profil?[this.profil]:[]}; } };
@@ -750,6 +751,7 @@ function carteDresseur(p){
         <div class="ligne"><span>Nature</span><b>${esc(p.nature)}</b></div>
         <div class="ligne"><span>Starter</span><b style="color:${coulType(s.el)}">${esc(p.starter)}</b></div>
         ${p.typeEquipe?`<div class="ligne"><span>Équipe monotype</span><b style="color:${coulType(p.typeEquipe)}">${esc(p.typeEquipeNom||nomType(p.typeEquipe))}</b></div>`:""}
+        ${p.build?`<div class="ligne"><span>Chantier</span><b>${esc(p.build.emoji+" "+p.build.nom)}</b></div>`:""}
         <div class="ligne"><span>Minecraft</span><b>${p.mc?esc(p.mc)+(p.mcVerifie?" (vérifié)":" (déclaré)"):"non lié"}</b></div>
         <div class="defis">${(p.defis||[]).map(d=>`<div class="${d.fait?"fait":""}"><span>${d.fait?"✔":"▫"}</span>${esc(d.txt)}</div>`).join("")}</div>
       </div>${p.traits?radarHTML(p.traits):""}</div>
@@ -960,6 +962,10 @@ async function demarrer(){
     await dire(`Dernier point de mon ordonnance. Ton caractère appelle un type : {y}${profil.typeEquipeNom}{/}. Ton grand défi sera de monter une équipe de six Pokémon de ce type.`);
     const perso=(profil.defis||[]).filter(d=>d.trait);
     if(perso.length) await dire(`Et parce que tu es fait ${de(perso[0].trait)}${perso[1]?" et "+de(perso[1].trait):""}, deux défis rien que pour toi t'attendent.`);
+  }
+  if(profil.build){
+    await dire(`Dernière chose : Portamer, notre port, a besoin de bras. Le sort t'a confié un chantier : {y}${profil.build.emoji} ${profil.build.nom}{/}.`);
+    await dire(profil.build.idee);
   }
   await dire(DEMO?"En mode démonstration, rien n'est envoyé sur Discord.":"Tout le monde vient d'être prévenu sur Discord, et ta carte de dresseur y arrive dans un instant. Tu as aussi reçu ton rôle {y}Dresseur{/} et celui de ton archétype.");
   panneau(carteDresseur(profil)); fanfare(); confettis(); accueilConnu.envoyee=true; envoyerCarte(profil);
